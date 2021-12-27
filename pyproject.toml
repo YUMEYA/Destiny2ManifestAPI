@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "destiny2_manifest_api"
+version = "0.1.0"
+description = ""
+authors = ["YUMEYA <shiaobo8@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+aiofiles = "^0.8.0"
+aioify = "^0.4.0"
+aiologger = "^0.6.1"
+aiosqlite = "^0.17.0"
+APScheduler = "^3.8.1"
+asyncstdlib = "^3.10.2"
+fastapi = "^0.70.1"
+gino = {extras = ["starlette"], version = "^1.0.1"}
+gunicorn = "^20.1.0"
+httpx = "^0.21.1"
+psycopg2-binary = "^2.9.2"
+python-dotenv = "^0.19.2"
+uvicorn = "^0.16.0"
+
+[tool.poetry.dev-dependencies]
+black = "^21.12b0"
+flake8 = "^4.0.1"
+isort = "^5.10.1"
+mypy = "^0.930"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.isort]
+profile = "black"
