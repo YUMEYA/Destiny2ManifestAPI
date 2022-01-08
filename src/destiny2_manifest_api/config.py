@@ -26,16 +26,15 @@ MANIFEST_DB_PREFIX = config("MANIFEST_DB_PREFIX", default="destiny2_manifest")
 BUNGIE_API_HOST = config("BUNGIE_API_HOST", default="https://www.bungie.net")
 BUNGIE_API_ROOT = config("BUNGIE_API_ROOT", default=f"{BUNGIE_API_HOST}/Platform")
 BUNGIE_API_KEY = config("BUNGIE_API_KEY", cast=Secret)
-PG_HOST = config("PG_HOST", default="localhost")
-PG_PORT = config("PG_PORT", cast=int, default="5432")
-PG_USERNAME = config("PG_USERNAME", default=None)
-PG_PASSWORD = config("PG_PASSWORD", cast=Secret, default=None)
 
-PG_DB_MAPPING = {
-    lang: f"postgresql://{PG_USERNAME}:{str(PG_PASSWORD)}@"
-    f"{PG_HOST}:{PG_PORT}/{MANIFEST_DB_PREFIX}_{lang}"
-    for lang in MANIFEST_LANG
-}
-PG_DEFAULT_DSN = PG_DB_MAPPING[MANIFEST_LANG[0]]
+MONGO_HOST = config("MONGO_HOST", default="localhost")
+MONGO_PORT = config("MONGO_PORT", cast=int, default="27017")
+MONGO_USERNAME = config("MONGO_USERNAME", default=None)
+MONGO_PASSWORD = config("MONGO_PASSWORD", cast=Secret, default=None)
+MONGO_URI = (
+    f"mongodb://{MONGO_USERNAME}:{str(MONGO_PASSWORD)}@"
+    f"{MONGO_HOST}:{MONGO_PORT}/?authSource=admin"
+)
+
 LOG_FILE_PATH.mkdir(parents=True, exist_ok=True)
 MANIFEST_SAVE_DIR.mkdir(parents=True, exist_ok=True)

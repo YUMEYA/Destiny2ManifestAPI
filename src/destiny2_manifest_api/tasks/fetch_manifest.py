@@ -1,3 +1,4 @@
+import json
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -5,8 +6,8 @@ from typing import AsyncGenerator
 
 import aiofiles
 import aiosqlite
-import asyncpg
 from httpx import AsyncClient, Response
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from .. import config
 from ..utils.functions import aobject, api_request, async_wrap
@@ -24,34 +25,13 @@ class Manifest(aobject):
         self.manifest_sqlite_dir = config.MANIFEST_SAVE_DIR / "sqlite"
         self.manifest_sqlite_dir.mkdir(0o755, parents=True, exist_ok=True)
         self.manifest_sqlite_filename = f"{self.language}.content"
-        self.manifest_pg_dbname = f"{config.MANIFEST_DB_PREFIX}_{self.language}"
-        self.manifest_pg_dsn = config.PG_DB_MAPPING.get(self.language)
+        self.manifest_mongo_dbname = f"{config.MANIFEST_DB_PREFIX}_{self.language}"
+        self.manifest_mongo_uri = config.MONGO_URI
 
-        self.pg_conn_pool = await self.__get_pg_conn_pool()
         await self.__check_origin_manifest()
-
-    async def __get_pg_conn_pool(self) -> asyncpg.Pool:
-
-        try:
-            await logger.debug(f"Connecting to database: {self.manifest_pg_dsn}")
-            conn_pool: asyncpg.Pool = await asyncpg.create_pool(self.manifest_pg_dsn)
-        except asyncpg.exceptions.InvalidCatalogNameError:
-            await logger.info(
-                f"Database {self.manifest_pg_dbname} not exists, creating new database..."
-            )
-            sys_conn: asyncpg.Connection = await asyncpg.connect(
-                host=config.PG_HOST,
-                port=config.PG_PORT,
-                user=config.PG_USERNAME,
-                password=str(config.PG_PASSWORD),
-                database="postgres",
-            )
-            await sys_conn.execute(
-                f'CREATE DATABASE "{self.manifest_pg_dbname}" OWNER "{config.PG_USERNAME}"'
-            )
-            await sys_conn.close()
-            conn_pool: asyncpg.Pool = await asyncpg.create_pool(self.manifest_pg_dsn)
-        return conn_pool
+        self.mongo: AsyncIOMotorDatabase = AsyncIOMotorClient(self.manifest_mongo_uri)[
+            self.manifest_mongo_dbname
+        ]
 
     async def __check_origin_manifest(self) -> None:
         resp: Response = await api_request("GET", "/Destiny2/Manifest/")
@@ -71,26 +51,13 @@ class Manifest(aobject):
 
     @property
     async def is_outdated(self):
-        async with self.pg_conn_pool.acquire() as pg:
-            pg: asyncpg.Connection
-            try:
-                verison = await pg.fetchval(
-                    "SELECT version FROM public.manifest_version;"
-                )
-                await logger.info(f"Local manifest version: {verison}")
-            except asyncpg.exceptions.UndefinedTableError:
-                await logger.info("Cannot get local manifest version")
-                await pg.execute(
-                    "CREATE TABLE IF NOT EXISTS public.manifest_version ("
-                    "id INTEGER PRIMARY KEY NOT NULL,"
-                    "version TEXT NOT NULL,"
-                    "update_time TIMESTAMP NOT NULL"
-                    ");"
-                )
-                verison = await pg.fetchval(
-                    "SELECT version FROM public.manifest_version;"
-                )
-        if verison != self.version:
+        doc = await self.mongo["manifest_version"].find_one({"_id": 1})
+        if not doc:
+            await logger.info("Cannot get local manifest version")
+            version = None
+        else:
+            version: str = doc.get("version", "")
+        if version != self.version:
             return True
         return False
 
@@ -130,38 +97,17 @@ class Manifest(aobject):
             ) as cursor:
                 async for row in cursor:
                     tablename: str = row["name"]
-                    table_meta = []
+                    table_meta = {}
                     async with await db.execute(
                         f"pragma table_info({tablename})"
                     ) as table_metas:
                         async for meta_row in table_metas:
-                            table_meta.append(
-                                {
-                                    "name": meta_row["name"],
-                                    "type": "BIGINT"
-                                    if meta_row["type"] == "INTEGER"
-                                    else meta_row["type"],
-                                    "pk": meta_row["pk"],
-                                }
-                            )
+                            table_meta[meta_row["name"]] = {
+                                "name": meta_row["name"],
+                                "type": meta_row["type"],
+                                "pk": meta_row["pk"],
+                            }
                     yield tablename, table_meta
-
-    async def create_pg_table(self, tablename: str, meta: list) -> None:
-        await logger.info(f"Create table [{tablename}] if not exists")
-        async with self.pg_conn_pool.acquire() as pg:
-            pg: asyncpg.Connection
-            await pg.execute(
-                f"CREATE TABLE IF NOT EXISTS public.{tablename} ("
-                f"{meta[0].get('name','id')} {meta[0].get('type','BIGINT')} PRIMARY KEY NOT NULL,"
-                f"{meta[1].get('name','json')} JSONB NULL"
-                ");"
-            )
-
-    async def truncate_pg_table(self, tablename: str) -> None:
-        await logger.info(f"Truncating table [{tablename}]")
-        async with self.pg_conn_pool.acquire() as pg:
-            pg: asyncpg.Connection
-            await pg.execute(f"TRUNCATE TABLE public.{tablename};")
 
     async def iter_sqlite_table_data(self, tablename: str):
         await logger.info(f"Fetching data from table [{tablename}]")
@@ -174,78 +120,74 @@ class Manifest(aobject):
                     yield row
 
     def int_signed_to_unsigned(self, integer: int) -> int:
-        if integer < 0:
-            return integer + (1 << 32)
-        return integer
+        try:
+            int(integer)
+        except ValueError:
+            return integer
+        if not isinstance(integer, int) or integer >= 0:
+            return integer
+        return integer + (1 << 32)
 
     async def iter_insert_batch(
         self,
         data_src: AsyncGenerator[aiosqlite.Row, None],
-        table_meta: list,
+        table_meta: dict[dict[str]],
         batch_size=1000,
     ):
         counter = 0
-        stmts = []
+        batch = []
         async for data_row in data_src:
-            row_value = []
             for data_key in data_row.keys():
-                if (data_key == table_meta[0].get("name", "")) and (
-                    "INT" in table_meta[0].get("type", "")
-                ):
-                    row_value.append(self.int_signed_to_unsigned(data_row[data_key]))
-                else:
-                    row_value.append(f"{data_row[data_key]}")
+                _meta = table_meta[data_key]
+                if _meta["pk"] == 1:
+                    _id = self.int_signed_to_unsigned(data_row[data_key])
+                elif _meta["name"] == "json":
+                    _json = json.loads(data_row[data_key])
+
+            row_value = {"_id": _id, "json": _json}
+
             counter += 1
-            stmts.append(tuple(row_value))
+            batch.append(row_value)
             if counter >= batch_size:
-                yield stmts
+                yield batch
                 counter = 0
-                stmts = []
-        if stmts:
-            yield stmts
+                batch = []
+        if batch:
+            yield batch
 
-    async def insert_pg_table_data(
-        self, tablename: str, table_meta: list, values: list = []
-    ) -> None:
-        await logger.info(f"Inserting into table [{tablename}]")
-        sql = (
-            f"INSERT INTO public.{tablename} "
-            f"({table_meta[0].get('name','id')}, {table_meta[1].get('name','json')}) "
-            f"VALUES ($1, $2);"
+    async def batch_insert(self, tablename, batch: list) -> None:
+        try:
+            await logger.info(f"Inserting into collection [{tablename}]")
+            await self.mongo[tablename].insert_many(batch)
+        except Exception as e:
+            await logger.exception(e)
+
+    async def update_version(self) -> None:
+        await self.mongo["manifest_version"].update_one(
+            {"_id": 1},
+            {
+                "$set": {
+                    "version": self.version,
+                    "update_time": datetime.now(),
+                }
+            },
+            upsert=True,
         )
-        async with self.pg_conn_pool.acquire() as pg:
-            pg: asyncpg.Connection
-            async with pg.transaction():
-                try:
-                    await pg.executemany(sql, values)
-                except Exception as e:
-                    await logger.debug(sql)
-                    await logger.exception("Insert Error!")
-                    raise e
-
-    async def update_version(self):
-        await self.truncate_pg_table("manifest_version")
-        async with self.pg_conn_pool.acquire() as pg:
-            pg: asyncpg.Connection
-            await pg.execute(
-                "INSERT INTO public.manifest_version(id, version, update_time) "
-                "values ($1, $2, $3)"
-                "ON CONFLICT (id) "
-                "DO UPDATE SET version=$2, update_time=$3;",
-                *(1, self.version, datetime.now()),
-            )
 
     async def migrate_data(
         self,
         tablename: str,
-        table_meta: list,
-    ):
-        await self.create_pg_table(tablename, table_meta)
-        await self.truncate_pg_table(tablename)
-        async for stmt in self.iter_insert_batch(
+        table_meta: dict[dict[str]],
+    ) -> None:
+        try:
+            await self.mongo[tablename].drop()
+        except Exception as e:
+            await logger.exception(e)
+
+        async for batch in self.iter_insert_batch(
             self.iter_sqlite_table_data(tablename), table_meta
         ):
-            await self.insert_pg_table_data(tablename, table_meta, stmt)
+            await self.batch_insert(tablename, batch)
         await self.update_version()
 
 

@@ -12,7 +12,7 @@ async def lazy_engines(request: Request, call_next):
     from gino import create_engine
 
     from . import config
-    from .app.models import dbname, engines
+    from .app.orms import dbname, engines
 
     name = request.query_params.get("lang", config.MANIFEST_LANG[0])
     dsn = config.PG_DB_MAPPING[name]

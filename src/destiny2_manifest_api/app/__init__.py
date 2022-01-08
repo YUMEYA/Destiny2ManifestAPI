@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from ..config import DEBUG
 
-from .models import db
+from .orms import db
 
 
 def create_app():

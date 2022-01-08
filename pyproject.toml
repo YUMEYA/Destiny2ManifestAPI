@@ -13,12 +13,11 @@ aiosqlite = "^0.17.0"
 APScheduler = "^3.8.1"
 asyncstdlib = "^3.10.2"
 fastapi = "^0.70.1"
-gino = {extras = ["starlette"], version = "^1.0.1"}
 gunicorn = "^20.1.0"
 httpx = "^0.21.1"
-psycopg2-binary = "^2.9.2"
 python-dotenv = "^0.19.2"
 uvicorn = "^0.16.0"
+motor = "^2.5.1"
 
 [tool.poetry.dev-dependencies]
 black = "^21.12b0"
