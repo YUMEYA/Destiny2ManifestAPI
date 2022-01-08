@@ -6,27 +6,10 @@ app = create_app()
 
 
 @app.middleware("http")
-async def lazy_engines(request: Request, call_next):
-    from asyncio import Future
-
-    from gino import create_engine
-
+async def set_dbname(request: Request, call_next):
     from . import config
-    from .app.orms import dbname, engines
+    from .app.models import dbname
 
-    name = request.query_params.get("lang", config.MANIFEST_LANG[0])
-    dsn = config.PG_DB_MAPPING[name]
-    fut = engines.get(name)
-    if fut is None:
-        fut = engines[name] = Future()
-        try:
-            engine = await create_engine(dsn)
-        except Exception as e:
-            fut.set_exception(e)
-            del engines[name]
-            raise
-        else:
-            fut.set_result(engine)
-    await fut
-    dbname.set(name)
+    lang = request.query_params.get("lang", config.MANIFEST_LANG[0])
+    dbname.set(f"{config.MANIFEST_DB_PREFIX}_{lang}")
     return await call_next(request)
