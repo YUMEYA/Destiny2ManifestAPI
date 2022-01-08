@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from ... import config
+from ...utils.functions import aobject
 
 dbname = ContextVar(
     "dbname", default=f"{config.MANIFEST_DB_PREFIX}_{config.MANIFEST_LANG[0]}"
@@ -48,3 +49,30 @@ class ContextualMongo:
 
 
 mongo = ContextualMongo(uri=config.MONGO_URI)
+
+
+class BaseModel(aobject):
+    __collection_name__ = ""
+
+    async def __init__(self, hash: int = None, name: str = ""):
+        if not self.__collection_name__:
+            raise TypeError("Unknown collection name, ")
+        self.collection = mongo.db[self.__collection_name__]
+        self.hash = hash
+        self.name = name
+
+        if self.hash:
+            _raw = await self.collection.find_one({"_id": hash})
+            self.name = (
+                _raw.get("json", {}).get("displayProperties", {}).get("name", "")
+            )
+        elif self.name:
+            _raw = await self.collection.find_one({"json.displayProperties.name": name})
+            self.hash = _raw.get("_id", None)
+        else:
+            raise TypeError("Must provide either name or hash")
+        if not _raw:
+            raise ValueError(
+                f"Unknown {self.__class__.__name__}<name={self.name}, hash={self.hash}>"
+            )
+        self.raw = _raw.get("json", {})
