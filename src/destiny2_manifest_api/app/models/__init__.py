@@ -28,7 +28,6 @@ class ContextualMongo:
         password: str = "",
         db: str = "local",
         authSource: str = "admin",
-        replicaSet: str = "",
     ) -> None:
         self.uri = (
             uri
@@ -37,7 +36,6 @@ class ContextualMongo:
                 f"mongodb://{quote_plus(user)}:{quote_plus(password)}@"
                 f"{host}:{port}/{db}?"
                 f"authSource={authSource}"
-                f"{f'&replicaSet={replicaSet}' if replicaSet else ''}"
             )
         )
         self.client: AsyncIOMotorClient = AsyncIOMotorClient(self.uri)

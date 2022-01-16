@@ -52,11 +52,12 @@ class Manifest(aobject):
     @property
     async def is_outdated(self):
         doc = await self.mongo["manifest_version"].find_one({"_id": 1})
+        version: str | None
         if not doc:
             await logger.info("Cannot get local manifest version")
             version = None
         else:
-            version: str = doc.get("version", "")
+            version = doc.get("version", "")
         if version != self.version:
             return True
         return False
@@ -131,7 +132,7 @@ class Manifest(aobject):
     async def iter_insert_batch(
         self,
         data_src: AsyncGenerator[aiosqlite.Row, None],
-        table_meta: dict[dict[str]],
+        table_meta: dict[str, dict[str, str]],
         batch_size=1000,
     ):
         counter = 0
@@ -177,7 +178,7 @@ class Manifest(aobject):
     async def migrate_data(
         self,
         tablename: str,
-        table_meta: dict[dict[str]],
+        table_meta: dict[str, dict[str, str]],
     ) -> None:
         try:
             await self.mongo[tablename].drop()

@@ -33,3 +33,10 @@ WATERMARK_SEASON_MAPPING = {
     "/common/destiny2_content/icons/a9faab035e2f59f802e99641a3aaab9e.png": 14,
     "/common/destiny2_content/icons/4368a3e344977c5551407845ede830c2.png": 15,
 }
+
+YEAR_SEASON_MAPPING = {
+    1: [1, 2, 3],
+    2: [4, 5, 6, 7],
+    3: [8, 9, 10, 11],
+    4: [12, 13, 14, 15],
+}

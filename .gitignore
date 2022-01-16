@@ -184,3 +184,4 @@ cython_debug/
 .python-version
 test.http
 test.py
+**/manifest/**

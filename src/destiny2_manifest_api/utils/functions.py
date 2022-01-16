@@ -49,7 +49,8 @@ def async_wrap(func):
 
 
 class aobject(object):
-    """Inheriting this class allows you to define an async __init__.
+    """
+    Inheriting this class allows you to define an async __init__.
 
     So you can create objects by doing something like `await MyClass(params)`
     """

@@ -1,8 +1,13 @@
-from ...utils.constants import WATERMARK_SEASON_MAPPING
+from ...utils.constants import WATERMARK_SEASON_MAPPING, YEAR_SEASON_MAPPING
 from ...utils.functions import aobject
 from .base_model import BaseModel
 from .plug_set import PlugSet
 from .socket_category import SocketCategory
+from .stat import Stat
+
+
+class InventoryItem(BaseModel):
+    __collection_name__ = "DestinyInventoryItemDefinition"
 
 
 class SocketInstance(aobject):
@@ -33,16 +38,70 @@ class Socket(aobject):
             self.socket_instances.append(await SocketInstance(**s))
 
 
-class InventoryItem(BaseModel):
-    __collection_name__ = "DestinyInventoryItemDefinition"
+class Weapon(InventoryItem):
+    async def __init__(
+        self,
+        hash: int | None = None,
+        name: str | None = "",
+        *,
+        year: int | None = None,
+        season: int | None = None,
+    ):
+        self.year = year
+        self.season = season
+        if self.year or self.season:
+            additional_queries = self._gen_additional_queries()
+        else:
+            additional_queries = {}
+
+        await super(Weapon, self).__init__(
+            hash,
+            name,
+            additional_queries=additional_queries,
+        )
+        self._get_season_by_watermark()
+        self._get_year_by_season()
+
+    def _get_season_by_watermark(self):
+        if watermark := self.iconWatermark:
+            self.season = WATERMARK_SEASON_MAPPING.get(watermark)
+
+    def _get_year_by_season(self):
+        if year := [y for y, s in YEAR_SEASON_MAPPING.items() if self.season in s]:
+            self.year = year[0]
+
+    def _gen_additional_queries(self):
+        additional_queries: dict = {"json.itemCategoryHashes": 1}
+        if self.year == 1:
+            if self.season == 1:
+                additional_queries["json.iconWatermark"] = {"$exists": False}
+            else:
+                additional_queries[
+                    "$or" : [
+                        {"json.iconWatermark": {"$exists": False}},
+                        {"json.iconWatermark": {"$in": self._get_watermarks()}},
+                    ]
+                ]
+        else:
+            additional_queries["json.iconWatermark"] = {"$in": self._get_watermarks()}
+        return additional_queries
+
+    def _get_watermarks(self) -> list[str]:
+        watermarks: list[str] = []
+        if self.season:
+            watermarks = [
+                wm for wm, ss in WATERMARK_SEASON_MAPPING.items() if ss == self.season
+            ]
+            return watermarks
+        if self.year:
+            seasons = YEAR_SEASON_MAPPING.get(self.year)
+            watermarks = [
+                wm for wm, ss in WATERMARK_SEASON_MAPPING.items() if ss in seasons
+            ]
+        return watermarks
 
     @property
-    def season(self) -> str:
-        if wm := self.iconWatermark:
-            return WATERMARK_SEASON_MAPPING.get(wm)
-
-    @property
-    async def sockets(self) -> dict[str, list[SocketInstance]]:
+    async def sockets(self) -> dict[str, list[SocketInstance]] | None:
         if sockets := self.raw.get("sockets"):
             sockets: dict
             socket_dict: dict[str, list[SocketInstance]] = {}
@@ -59,5 +118,18 @@ class InventoryItem(BaseModel):
                 socket_dict[_socket.category.name] = _socket.socket_instances
 
             return socket_dict
+        else:
+            return None
+
+    @property
+    async def stats(self) -> dict[str, int | None] | None:
+        if stats := self.raw.get("stats", {}).get("stats", {}):
+            stats: dict[int, dict]
+            stat_dict: dict[str, int | None] = {}
+            for value in stats.values():
+                stat: Stat = await Stat(value.get("statHash"))
+                if stat.name:
+                    stat_dict[stat.name] = value.get("value")
+            return stat_dict
         else:
             return None
