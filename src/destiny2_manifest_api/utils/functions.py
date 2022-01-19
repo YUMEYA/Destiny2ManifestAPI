@@ -7,8 +7,8 @@ from .. import config
 
 
 class ResponseError(Exception):
-    def __init__(self, response: Response, *args: object) -> None:
-        super().__init__(*args)
+    def __init__(self, response: Response, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.response = response
         self.message = self.__str__()
 

@@ -1,6 +1,7 @@
 if __name__ == "__main__":
     import os
     import uvicorn
+    from destiny2_manifest_api.tasks import scheduler
 
     uvicorn.run(
         "destiny2_manifest_api.asgi:app",
@@ -9,3 +10,4 @@ if __name__ == "__main__":
         log_level="debug",
         reload=True,
     )
+    scheduler.start()
