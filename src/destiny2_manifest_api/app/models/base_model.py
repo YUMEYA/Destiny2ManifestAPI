@@ -4,8 +4,25 @@ from ...utils.functions import aobject
 from . import mongo
 
 
+class UnknownCollectionName(Exception):
+    pass
+
+
+class MissingHashOrName(Exception):
+    pass
+
+
+class CannotFindEntity(Exception):
+    pass
+
+
 class BaseModel(aobject):
     __collection_name__: str = ""
+
+    collection: AsyncIOMotorCollection
+    hash: int | None
+    name: str
+    raw: dict
 
     async def __init__(
         self,
@@ -15,7 +32,7 @@ class BaseModel(aobject):
         additional_queries: dict = {},
     ):
         if not self.__collection_name__:
-            raise TypeError("Unknown collection name.")
+            raise UnknownCollectionName("Unknown collection name.")
 
         self.collection: AsyncIOMotorCollection = mongo.db[self.__collection_name__]
         self.hash: int | None = hash
@@ -27,7 +44,7 @@ class BaseModel(aobject):
         elif self.name:
             filter = {"json.displayProperties.name": self.name}
         else:
-            raise TypeError(
+            raise MissingHashOrName(
                 f"Must provide either name or hash for {self.__class__.__name__}"
             )
         if additional_queries:
@@ -36,8 +53,8 @@ class BaseModel(aobject):
             filter, sort=[("json.index", DESCENDING)]
         )
         if not _raw:
-            raise ValueError(
-                f"Unknown {self.__class__.__name__}<name={self.name}, hash={self.hash}>"
+            raise CannotFindEntity(
+                f"Unknown {self.__class__.__name__} <name={self.name}, hash={self.hash}>"
             )
 
         self.hash = _raw.get("_id", None)

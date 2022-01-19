@@ -1,31 +1,44 @@
+from collections import defaultdict
+
 from ...utils.constants import WATERMARK_SEASON_MAPPING, YEAR_SEASON_MAPPING
 from ...utils.functions import aobject
 from .base_model import BaseModel
-from .plug_set import PlugSet
-from .socket_category import SocketCategory
-from .stat import Stat
 
 
 class InventoryItem(BaseModel):
     __collection_name__ = "DestinyInventoryItemDefinition"
 
+    @property
+    def icon(self) -> str | None:
+        if icon := self.displayProperties.get("icon"):
+            return icon
+        else:
+            return None
+
+
+from .plug_set import Plug, PlugSet
+from .socket_category import SocketCategory
+from .stat import Stat
+
 
 class SocketInstance(aobject):
     async def __init__(self, **kwargs):
         if initial_item_hash := kwargs.get("singleInitialItemHash"):
-            self.initial_item: InventoryItem = await InventoryItem(
-                hash=initial_item_hash
-            )
+            self.initial_item: Plug = await Plug(hash=initial_item_hash)
         else:
             self.initial_item = None
 
         if plug_set_hash := kwargs.get("randomizedPlugSetHash"):
-            self.possible_items: PlugSet = await PlugSet(hash=plug_set_hash)
+            self.possible_items: list[Plug] = [
+                plug async for plug in await PlugSet(hash=plug_set_hash)
+            ]
         else:
             self.possible_items = None
 
         if plug_set_hash := kwargs.get("reusablePlugSetHash"):
-            self.fixed_items: PlugSet = await PlugSet(hash=plug_set_hash)
+            self.fixed_items: list[Plug] = [
+                plug async for plug in await PlugSet(hash=plug_set_hash)
+            ]
         else:
             self.fixed_items = None
 
@@ -133,3 +146,26 @@ class Weapon(InventoryItem):
             return stat_dict
         else:
             return None
+
+    async def as_dict(self) -> dict:
+        sockets = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        for key, socket_list in (await self.sockets).items():
+            for index, socket in enumerate(socket_list):
+                for attr in vars(socket).keys():
+                    if (plugs := getattr(socket, attr, None)) is not None:
+                        plugs: Plug | list[Plug]
+                        if isinstance(plugs, Plug):
+                            sockets[key][index][attr].append(plugs.name)
+                        else:
+                            [
+                                sockets[key][index][attr].append(plug.name)
+                                for plug in plugs
+                            ]
+        return {
+            "hash": self.hash,
+            "name": self.name,
+            "year": self.year,
+            "season": self.season,
+            "stats": await self.stats,
+            "sockets": sockets,
+        }
