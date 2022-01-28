@@ -162,7 +162,6 @@ class Weapon(InventoryItem):
                                 for plug in plugs
                             ]
         return {
-            "hash": self.hash,
             "name": self.name,
             "year": self.year,
             "season": self.season,

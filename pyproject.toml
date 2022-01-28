@@ -29,6 +29,9 @@ mypy = "^0.930"
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-
 [tool.isort]
 profile = "black"
+
+[tool.poetry.plugins."destiny2_manifest_api.modules"]
+"lore" = "destiny2_manifest_api.app.apis.lore"
+"weapon" = "destiny2_manifest_api.app.apis.weapon"

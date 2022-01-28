@@ -1,8 +1,19 @@
+from importlib.metadata import entry_points
+
 from fastapi import FastAPI, Request
 
 from ..utils.logging import create_logger
 
 logger = create_logger("destiny_manifest_api.app", "app.log")
+
+
+def load_modules(app=None):
+    for ep in entry_points()["destiny2_manifest_api.modules"]:
+        mod = ep.load()
+        if app:
+            init_app = getattr(mod, "init_app", None)
+            if init_app:
+                init_app(app)
 
 
 def create_app():
@@ -11,6 +22,7 @@ def create_app():
 
     app = FastAPI(title="Destiny 2 Manifest API", debug=config.DEBUG)
     mongo.init_app(app)
+    load_modules(app)
 
     @app.middleware("http")
     async def set_dbname(request: Request, call_next):
@@ -18,8 +30,9 @@ def create_app():
         dbname.set(f"{config.MANIFEST_DB_PREFIX}_{lang}")
         return await call_next(request)
 
-    from .models.base_model import CannotFindEntity, MissingHashOrName
     from fastapi.responses import JSONResponse
+
+    from .models.base_model import CannotFindEntity, MissingHashOrName
 
     @app.exception_handler(CannotFindEntity)
     async def cannot_find_entity_handler(request: Request, exc: CannotFindEntity):
@@ -28,5 +41,12 @@ def create_app():
     @app.exception_handler(MissingHashOrName)
     async def missing_hash_or_name_handler(request: Request, exc: MissingHashOrName):
         return JSONResponse({"message": exc.message}, 400)
+
+    @app.on_event("startup")
+    async def run_schduler():
+        from ..tasks import scheduler, update_task
+
+        await update_task()
+        scheduler.start()
 
     return app

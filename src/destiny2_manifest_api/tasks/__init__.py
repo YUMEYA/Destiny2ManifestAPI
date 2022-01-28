@@ -34,4 +34,4 @@ async def update_task():
     from .fetch_manifest import manifest_task
 
     tasks = [asyncio.create_task(manifest_task(lang)) for lang in MANIFEST_LANG]
-    asyncio.wait(tasks)
+    await asyncio.wait(tasks)
