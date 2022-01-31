@@ -120,6 +120,12 @@ class Weapon(InventoryItem):
             socket_dict: dict[str, list[SocketInstance]] = {}
             for category in sockets.get("socketCategories"):
                 category: dict
+                # Skip decorators and masterworks on Legendary weapons
+                if (
+                    category.get("socketCategoryHash") in [2048875504, 2685412949]
+                    and self.inventory.get("tierTypeHash") == 4008398120
+                ):
+                    continue
                 socket_entry_list = [
                     s
                     for idx, s in enumerate(sockets.get("socketEntries", []))
@@ -162,6 +168,7 @@ class Weapon(InventoryItem):
                                 for plug in plugs
                             ]
         return {
+            "hash": self.hash,
             "name": self.name,
             "year": self.year,
             "season": self.season,

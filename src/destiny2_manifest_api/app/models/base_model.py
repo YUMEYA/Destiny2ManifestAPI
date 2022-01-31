@@ -5,15 +5,21 @@ from . import mongo
 
 
 class UnknownCollectionName(Exception):
-    pass
+    def __init__(self, message):
+        self.message = message
+        super().__init__(message)
 
 
 class MissingHashOrName(Exception):
-    pass
+    def __init__(self, message):
+        self.message = message
+        super().__init__(message)
 
 
 class CannotFindEntity(Exception):
-    pass
+    def __init__(self, message):
+        self.message = message
+        super().__init__(message)
 
 
 class BaseModel(aobject):

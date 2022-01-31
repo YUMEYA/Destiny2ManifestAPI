@@ -24,12 +24,6 @@ scheduler = AsyncIOScheduler(
 )
 
 
-@scheduler.scheduled_job(
-    trigger="cron",
-    hour=1,
-    id="update_manifest",
-    name="update_manifest",
-)
 async def update_task():
     from .fetch_manifest import manifest_task
 

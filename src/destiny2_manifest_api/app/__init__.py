@@ -44,9 +44,19 @@ def create_app():
 
     @app.on_event("startup")
     async def run_schduler():
+        from datetime import datetime
+
         from ..tasks import scheduler, update_task
 
-        await update_task()
+        scheduler.add_job(
+            update_task,
+            trigger="cron",
+            hour=1,
+            id="update_manifest",
+            name="update_manifest",
+            replace_existing=True,
+        )
         scheduler.start()
+        scheduler.modify_job("update_manifest", next_run_time=datetime.now())
 
     return app

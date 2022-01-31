@@ -16,9 +16,9 @@ class LoreModel(BaseModel):
 @router.get("/", response_model=LoreModel)
 async def get_lore(
     hash: int | None = None,
-    name: str | None = None,
+    title: str | None = None,
 ):
-    if not hash and not name:
+    if not hash and not title:
         async for doc in mongo.db[Lore.__collection_name__].aggregate(
             [
                 {"$match": {"json.displayProperties.description": {"$ne": ""}}},
@@ -33,7 +33,7 @@ async def get_lore(
             break
         lore: Lore = await Lore(hash)
     else:
-        lore: Lore = await Lore(hash, name)
+        lore: Lore = await Lore(hash, title)
 
     return lore.as_dict()
 

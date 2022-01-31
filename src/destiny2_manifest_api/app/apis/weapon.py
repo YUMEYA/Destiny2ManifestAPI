@@ -7,7 +7,8 @@ router = APIRouter(prefix="/weapon", tags=["Weapon"])
 
 
 class WeaponModel(BaseModel):
-    name: str
+    hash: int | None
+    name: str | None
     year: int | None
     season: int | None
     stats: dict
